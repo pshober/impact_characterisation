@@ -17,12 +17,12 @@ read -p "Target eccentricity: " ecc
 read -p "Drive location: " drive
 
 # create folder for all the output files
-rmdir $drive/output_files_pokorny
-mkdir $drive/output_files_pokorny
+rmdir $drive/output_files_NEOs
+mkdir $drive/output_files_NEOs
 
 N=1
 
-csvcut -c 2,3,4,5 $filename | while read line; do
+csvcut -c 1,2,3,4 $filename | while read line; do
 
 # create input file
 echo $line > IN
@@ -33,7 +33,7 @@ echo $ecc >> IN
 ./CODE < IN
 
 # rename and mv file to storage folder
-mv output.txt $drive/output_files_pokorny/output$N.txt
+mv output.txt $drive/output_files_NEOs/output$N.txt
 
 N=$(( $N + 1 ))
 
@@ -41,4 +41,4 @@ done
 
 
 # # append output files and generate one csv file
-# python pokorny_output_to_usable.py -f ./output_files_pokorny
+# python pokorny_output_to_usable.py -f ./output_files_NEOs
