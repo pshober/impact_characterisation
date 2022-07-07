@@ -98,22 +98,22 @@ def shielding_factor(q, xi, F):
 
 def total_enhancement(N, distribution_array, lat_mids, vel_mids, p='Earth'):
     # distribution_array is a numpy array of shape (N_lat, N_lon, N_vel) and the values are the weights
-    distro = np.sum(distribution_array, axis=0)  # sum over all longitudes
+    distro = np.sum(distribution_array, axis=1)  # sum over all longitudes
     concatenated_d = np.concatenate(distro)
 
     idx_array = np.reshape(np.arange(np.size(distro)), np.shape(distro))
     concatenated_idx = np.concatenate(idx_array)
 
     # set up grid
-    r = np.linspace(1.0, 60.0, 1000)  # 60 Earth radii = 1 lunar sistance
-    nu_value = np.zeros(1000)
+    r = np.linspace(1.0, 60.0, 10000)  # 60 Earth radii = 1 lunar sistance
+    nu_value = np.zeros(10000)
 
     # iterate along grid
     for j, ri in enumerate(r):
         for i in range(N):
             idx = np.random.choice(concatenated_idx, p=concatenated_d/np.sum(concatenated_d))
             lat_idx, vel_idx = np.where(idx_array==idx)
-            xi = np.abs(lat_mids[lat_idx] * np.pi / 180.0)  # convert to radians
+            xi = np.deg2rad(np.abs(lat_mids[lat_idx]))  # convert to radians
             vi = vel_mids[vel_idx]
 
             F = F_factor(vi, ri, planet=p)
