@@ -13,9 +13,30 @@ import pandas as pd
 import rebound
 from astropy.io import fits
 
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+'--------------------------------------------------------------------'
+'----------CHANGE FOR EACH "pokorny_output_to_usable.py" RUN---------'
+
+lon_bounds = np.linspace(-180.0, 180.0, 101)
+lat_bounds = np.linspace(-90.0, 90.0, 101)
+vel_bounds = np.linspace(10.0, 72.0, 101)  # rough estimate
+
+def middle4bins(array):
+    return np.array([(array[i]+array[i+1]) / 2.0 for i in range(len(array)-1)])
+
+lon_mids = middle4bins(lon_bounds)
+lat_mids = middle4bins(lat_bounds)
+vel_mids = middle4bins(vel_bounds)
+
+distribution_array = np.load('results_histogram_run1.npy')
+
+'--------------------------------------------------------------------'
+
 # create a 3d histogram
 n_bins = 200
-side_distance = 4e8
+side_distance = 4e8  # just bigger than 1 LD (~ 3.844e8 m)
 hist_results = np.zeros((n_bins, n_bins, n_bins))
 bounds = np.linspace(-side_distance, side_distance, int(n_bins+1))
 distance_per_bin = (2.0 * side_distance) / n_bins
@@ -24,7 +45,7 @@ total_loops = 20
 
 for n in range(total_loops):
 
-    N_particles = int(1e5)
+    N_particles = int(5e4)
     n_outputs = int(1e3)
 
     print(f"Loop {n+1} \n")
@@ -73,7 +94,7 @@ for n in range(total_loops):
     for i in range(N_particles):
         sim.add(m=0.0, x=x[i], y=y[i], z=z[i], vx=vx[i], vy=vy[i], vz=vz[i])
 
-    results = np.zeros(shape=(n_outputs*sim.N, 4)) * np.nan
+    results = np.zeros(shape=(n_outputs*(sim.N-1), 4)) * np.nan
     times = np.linspace(0.0, 2.0 * 24.0 * 60.0 * 60.0, n_outputs)
 
     for i, step in enumerate(times):
@@ -82,7 +103,7 @@ for n in range(total_loops):
 
         sim.integrate(step)
 
-        for j in range(sim.N):
+        for j in range(1, sim.N):
             results[i*j,0] = j
             results[i*j,1] = sim.particles[j].x
             results[i*j,2] = sim.particles[j].y
@@ -108,9 +129,9 @@ for n in range(total_loops):
     '------------------------------------------- UPDATE --------------------------------------------'
 
     # divide distance_per_bin
-    x_indices = ((results[:,1] + 4e8) / distance_per_bin).astype(int)
-    y_indices = ((results[:,2] + 4e8) / distance_per_bin).astype(int)
-    z_indices = ((results[:,2] + 4e8) / distance_per_bin).astype(int)
+    x_indices = ((results[:,1] + side_distance) / distance_per_bin).astype(int)
+    y_indices = ((results[:,2] + side_distance) / distance_per_bin).astype(int)
+    z_indices = ((results[:,3] + side_distance) / distance_per_bin).astype(int)
 
     # remove indices out of range
     x_indices[np.where(x_indices < 0)[0]] = 0.0
@@ -120,10 +141,26 @@ for n in range(total_loops):
     z_indices[np.where(z_indices < 0)[0]] = 0.0
     z_indices[np.where(z_indices > n_bins-1)[0]] = 0.0
 
-    hist_results[x_indices,y_indices,z_indices] += 1.0
-    hist_results[0,0,0] = 0
+    hist_results[x_indices, y_indices, z_indices] += 1.0
+    hist_results[0, 0, 0] = 0
 
-    np.save('flux_histogram.npy', results)
+    np.save('flux_histogram.npy', hist_results)
 
 
 # create plots
+middies = middle4bins(bounds)
+axisBoi = np.meshgrid(middies,middies)
+plt.hist2d(np.concatenate(axisBoi[0]), np.concatenate(axisBoi[1]), weights=np.concatenate(np.sum(hist_results[:,:,90:110], axis=2)), norm=mpl.colors.LogNorm(), bins=100)
+plt.show()
+
+# create csv
+x_coords, y_coords, z_coords = np.meshgrid(middies,middies,middies)
+
+x_coords = np.concatenate(np.concatenate(x_coords))
+y_coords = np.concatenate(np.concatenate(y_coords))
+z_coords = np.concatenate(np.concatenate(z_coords))
+
+weights = np.concatenate(np.concatenate(hist_results))
+
+hist_df = pd.DataFrame({'x': x_coords, 'y': y_coords, 'z': z_coords, 'count': weights})
+hist_df.to_csv('flux_enhancement_results.csv')
