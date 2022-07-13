@@ -37,11 +37,16 @@ distribution_array = np.load('results_histogram_run1.npy')
 # create a 3d histogram
 n_bins = 200
 side_distance = 4e8  # just bigger than 1 LD (~ 3.844e8 m)
-hist_results = np.zeros((n_bins, n_bins, n_bins))
+
+hist_results = np.zeros((n_bins, n_bins, n_bins))  # new histogram
+# hist_results = np.load('flux_histogram.npy')  # load histogram to add more data to
+
 bounds = np.linspace(-side_distance, side_distance, int(n_bins+1))
 distance_per_bin = (2.0 * side_distance) / n_bins
 
-total_loops = 20
+'--------------------------------------------------------------------'
+
+total_loops = 100
 
 for n in range(total_loops):
 
@@ -57,6 +62,7 @@ for n in range(total_loops):
     sim.add("399") # Earth
     active_particles = sim.N
     sim.N_active = active_particles
+    sim.move_to_com()
 
     # define start x,y,z
     r_start = 3.9 * 3.844e8  # LD (m) (approx. 1 Hill-sphere for the Earth)
@@ -69,7 +75,7 @@ for n in range(total_loops):
 
     # position is uniform
     theta_pos = np.random.uniform(0.0, np.pi, N_particles)
-    phi_pos = np.random.uniform(-np.pi, np.pi, N_particles)
+    phi_pos = np.random.uniform(0, 2.0 * np.pi, N_particles)
 
     # velocities theta are based on pokorny output
     distro = np.sum(distribution_array, axis=1)  # sum over all longitudes
@@ -83,8 +89,8 @@ for n in range(total_loops):
     vel_idx = [np.where(idx_array==i)[1][0] for i in idx]
 
     vels = vel_mids[vel_idx] * 1e3  # covert from km/s to m/s
-    theta_vel = np.deg2rad(lat_mids[lat_idx]) - (np.pi/2.0) # convert to radians and shift to correct range for spherical coords
-    phi_vel = np.random.uniform(-np.pi, np.pi, N_particles)
+    theta_vel = np.deg2rad(lat_mids[lat_idx]) + (np.pi/2.0) # convert to radians and shift to correct range for spherical coords
+    phi_vel = np.random.uniform(0, 2.0 * np.pi, N_particles)
 
     # convert spherical to cartesian
     x, y, z = polar2cart(r_start, theta_pos, phi_pos)
@@ -135,10 +141,27 @@ for n in range(total_loops):
 
     # remove indices out of range
     x_indices[np.where(x_indices < 0)[0]] = 0.0
+    y_indices[np.where(x_indices < 0)[0]] = 0.0
+    z_indices[np.where(x_indices < 0)[0]] = 0.0
+
     x_indices[np.where(x_indices > n_bins-1)[0]] = 0.0
+    y_indices[np.where(x_indices > n_bins-1)[0]] = 0.0
+    z_indices[np.where(x_indices > n_bins-1)[0]] = 0.0
+
+    x_indices[np.where(y_indices < 0)[0]] = 0.0
     y_indices[np.where(y_indices < 0)[0]] = 0.0
+    z_indices[np.where(y_indices < 0)[0]] = 0.0
+
+    x_indices[np.where(y_indices > n_bins-1)[0]] = 0.0
     y_indices[np.where(y_indices > n_bins-1)[0]] = 0.0
+    z_indices[np.where(y_indices > n_bins-1)[0]] = 0.0
+
+    x_indices[np.where(z_indices < 0)[0]] = 0.0
+    y_indices[np.where(z_indices < 0)[0]] = 0.0
     z_indices[np.where(z_indices < 0)[0]] = 0.0
+
+    x_indices[np.where(z_indices > n_bins-1)[0]] = 0.0
+    y_indices[np.where(z_indices > n_bins-1)[0]] = 0.0
     z_indices[np.where(z_indices > n_bins-1)[0]] = 0.0
 
     hist_results[x_indices, y_indices, z_indices] += 1.0
@@ -146,14 +169,15 @@ for n in range(total_loops):
 
     np.save('flux_histogram.npy', hist_results)
 
-
-# create plots
-middies = middle4bins(bounds)
-axisBoi = np.meshgrid(middies,middies)
-plt.hist2d(np.concatenate(axisBoi[0]), np.concatenate(axisBoi[1]), weights=np.concatenate(np.sum(hist_results[:,:,90:110], axis=2)), norm=mpl.colors.LogNorm(), bins=100)
-plt.show()
+#
+# # create plots
+# middies = middle4bins(bounds)
+# axisBoi = np.meshgrid(middies,middies)
+# plt.hist2d(np.concatenate(axisBoi[0]), np.concatenate(axisBoi[1]), weights=np.concatenate(np.sum(hist_results[:,:,90:110], axis=2)), norm=mpl.colors.LogNorm(), bins=100)
+# plt.show()
 
 # create csv
+middies = middle4bins(bounds)
 x_coords, y_coords, z_coords = np.meshgrid(middies,middies,middies)
 
 x_coords = np.concatenate(np.concatenate(x_coords))
@@ -164,3 +188,33 @@ weights = np.concatenate(np.concatenate(hist_results))
 
 hist_df = pd.DataFrame({'x': x_coords, 'y': y_coords, 'z': z_coords, 'count': weights})
 hist_df.to_csv('flux_enhancement_results.csv')
+
+# sum rotationally around z-axis
+def cart2polar(x, y, z):
+        r = np.linalg.norm(np.array([x, y, z]), axis=0)
+        theta = np.arccos(z / r)
+
+        # if x > 0:
+        #     phi = np.arctan(y / x)
+        # elif (x < 0) and (y >= 0):
+        #     phi = np.arctan(y / x) + np.pi
+        # elif (x < 0) and (y < 0):
+        #     phi = np.arctan(y / x) - np.pi
+        # elif (x == 0) and (y > 0):
+        #     phi = np.pi / 2.0
+        # elif (x == 0) and (y < 0):
+        #     phi = -np.pi / 2.0
+        # elif (x == 0) and (y == 0):
+        #     phi = np.nan
+
+        return r, theta, 0.0
+
+
+r, theta, phi = cart2polar(x_coords, y_coords, z_coords)
+
+# make all phi values the same
+x_rotate, y_rotate, z_rotate = polar2cart(r, theta, phi)
+
+# save csv where values are summed around z-axis
+hist_df = pd.DataFrame({'x': x_rotate, 'y': y_rotate, 'z': z_rotate, 'count': weights})
+hist_df.to_csv('flux_enhancement_rotated.csv')
