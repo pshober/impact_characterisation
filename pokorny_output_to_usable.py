@@ -52,9 +52,9 @@ for filename in os.listdir(folder_name):
 #         os.remove(file_txt)
 
 # create a PDF(lat, lon, vel)
-results = np.zeros((300,100,100))
+results = np.zeros((100,100,100))
 lon_bounds = np.linspace(-180.0, 180.0, 101)
-lat_bounds = np.linspace(-90.0, 90.0, 301)
+lat_bounds = np.linspace(-90.0, 90.0, 101)
 vel_bounds = np.linspace(10.0, 72.0, 101)  # rough estimate
 
 def h_index_find(lat, lon, vel, lat_edges, lon_edges, vel_edges):

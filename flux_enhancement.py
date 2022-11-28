@@ -38,15 +38,31 @@ distribution_array = np.load('results_histogram_run1.npy')
 n_bins = 200
 side_distance = 4e8  # just bigger than 1 LD (~ 3.844e8 m)
 
-hist_results = np.zeros((n_bins, n_bins, n_bins))  # new histogram
-# hist_results = np.load('flux_histogram.npy')  # load histogram to add more data to
+# hist_results = np.zeros((n_bins, n_bins, n_bins))  # new histogram
+hist_results = np.load('flux_histogram_new.npy')  # load histogram to add more data to
 
 bounds = np.linspace(-side_distance, side_distance, int(n_bins+1))
 distance_per_bin = (2.0 * side_distance) / n_bins
 
 '--------------------------------------------------------------------'
 
-total_loops = 100
+try:
+    total_particles_simulated = np.load('total_particles_simulated.npy')
+except FileNotFoundError:
+    total_particles_simulated = 0
+
+total_loops = 3000
+
+# set up simulation
+sim = rebound.Simulation()
+sim.units = ('s', 'm', 'kg')
+sim.integrator = 'ias15'
+sim.add("399") # Earth
+active_particles = sim.N
+sim.N_active = active_particles
+sim.move_to_com()
+
+sim.save("solar_system.bin")
 
 for n in range(total_loops):
 
@@ -55,14 +71,7 @@ for n in range(total_loops):
 
     print(f"Loop {n+1} \n")
 
-    # set up simulation
-    sim = rebound.Simulation()
-    sim.units = ('s', 'm', 'kg')
-    sim.integrator = 'ias15'
-    sim.add("399") # Earth
-    active_particles = sim.N
-    sim.N_active = active_particles
-    sim.move_to_com()
+    sim = rebound.Simulation("solar_system.bin")
 
     # define start x,y,z
     r_start = 3.9 * 3.844e8  # LD (m) (approx. 1 Hill-sphere for the Earth)
@@ -98,7 +107,10 @@ for n in range(total_loops):
 
     # add particles
     for i in range(N_particles):
-        sim.add(m=0.0, x=x[i], y=y[i], z=z[i], vx=vx[i], vy=vy[i], vz=vz[i])
+        vr_dot = np.dot(np.array([x[i],y[i],z[i]]), np.array([vx[i],vy[i],vz[i]]))  # calculate velocity relative to Earth
+
+        if vr_dot <= 0: # only simulate particles that approach the Earth (i.e. relative velocity <= 0)
+            sim.add(m=0.0, x=x[i], y=y[i], z=z[i], vx=vx[i], vy=vy[i], vz=vz[i])
 
     results = np.zeros(shape=(n_outputs*(sim.N-1), 4)) * np.nan
     times = np.linspace(0.0, 2.0 * 24.0 * 60.0 * 60.0, n_outputs)
@@ -167,9 +179,12 @@ for n in range(total_loops):
     hist_results[x_indices, y_indices, z_indices] += 1.0
     hist_results[0, 0, 0] = 0
 
-    np.save('flux_histogram.npy', hist_results)
+    np.save('flux_histogram_new.npy', hist_results)
 
-#
+    total_particles_simulated += sim.N-active_particles
+    np.save('total_particles_simulated', total_particles_simulated)
+
+
 # # create plots
 # middies = middle4bins(bounds)
 # axisBoi = np.meshgrid(middies,middies)
@@ -191,7 +206,7 @@ hist_df.to_csv('flux_enhancement_results.csv')
 
 # sum rotationally around z-axis
 def cart2polar(x, y, z):
-        r = np.linalg.norm(np.array([x, y, z]), axis=0)
+        r = np.sqrt((x**2.0)+(y**2.0)+(z**2.0))
         theta = np.arccos(z / r)
 
         # if x > 0:
@@ -218,3 +233,25 @@ x_rotate, y_rotate, z_rotate = polar2cart(r, theta, phi)
 # save csv where values are summed around z-axis
 hist_df = pd.DataFrame({'x': x_rotate, 'y': y_rotate, 'z': z_rotate, 'count': weights})
 hist_df.to_csv('flux_enhancement_rotated.csv')
+
+
+# make side-view heat map with individual x & z 1D histograms
+from matplotlib import cm as CM
+from matplotlib import mlab as ML
+from matplotlib.ticker import LogFormatter
+
+gridsize=100
+
+rotated_d = np.linalg.norm(np.array([x_rotate/3.844e8, z_rotate/3.844e8]), axis=0)
+under_1 = rotated_d[rotated_d < 1.0]
+C_values = weights / np.sqrt((x_coords**2.0)+(y_coords**2.0))
+minimum_value = np.median(C_values[rotated_d < 1.0])
+
+plt.subplot(111)
+plt.hexbin(x_rotate/3.844e8, z_rotate/3.844e8, C=weights/np.median(weights), gridsize=gridsize, cmap=CM.jet, bins='log', reduce_C_function=np.mean)
+plt.axis([0.0, 1.0, -1.0, 1.0])
+
+formatter = LogFormatter(10, labelOnlyBase=False)
+cb = plt.colorbar(format=formatter)
+cb.set_label('mean value')
+plt.show()
