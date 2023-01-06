@@ -72,7 +72,7 @@ total_loops = 5000
 sim = rebound.Simulation()
 sim.units = ('s', 'm', 'kg')
 sim.integrator = 'whfast'
-sim.dt = 30.0 
+sim.dt = 30.0
 
 sim.add("399") # Earth
 active_particles = sim.N
@@ -218,10 +218,10 @@ for n in range(total_loops):
     hist_results[x_indices, y_indices, z_indices] += 1.0
     hist_results[0, 0, 0] = 0
 
-    np.save('flux_histogram_new.npy', hist_results)
+    np.save(os.path.join(ResultsFolder,'flux_histogram_new.npy'), hist_results)
 
     total_particles_simulated += sim.N-active_particles
-    np.save('total_particles_simulated', total_particles_simulated)
+    np.save(os.path.join(ResultsFolder,'total_particles_simulated'), total_particles_simulated)
 
 
 # # create plots
