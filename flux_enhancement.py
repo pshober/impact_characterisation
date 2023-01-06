@@ -16,6 +16,19 @@ from astropy.io import fits
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
+import datetime
+
+# create save folder for raw results
+date_str = datetime.datetime.now().strftime('%Y%m%d')
+ResultsFolder = os.path.join(os.getcwd(), 'lunar_flux_results'+date_str)
+
+if not os.path.isdir(ResultsFolder): # Create the directory if it doesn't exist
+    os.mkdir(ResultsFolder)
+else:
+    # Removes all the subdirectories
+    shutil.rmtree(ResultsFolder)
+    os.mkdir(ResultsFolder)
+
 '--------------------------------------------------------------------'
 '----------CHANGE FOR EACH "pokorny_output_to_usable.py" RUN---------'
 
@@ -38,8 +51,10 @@ distribution_array = np.load('results_histogram_run1.npy')
 n_bins = 200
 side_distance = 4e8  # just bigger than 1 LD (~ 3.844e8 m)
 
-# hist_results = np.zeros((n_bins, n_bins, n_bins))  # new histogram
-hist_results = np.load('flux_histogram_new.npy')  # load histogram to add more data to
+if not os.path.isdir(os.path.join(ResultsFolder,'flux_histogram_new.npy')):
+    hist_results = np.zeros((n_bins, n_bins, n_bins))  # new histogram
+else:
+    hist_results = np.load(os.path.join(ResultsFolder,'flux_histogram_new.npy'))  # load histogram to add more data to
 
 bounds = np.linspace(-side_distance, side_distance, int(n_bins+1))
 distance_per_bin = (2.0 * side_distance) / n_bins
@@ -47,16 +62,18 @@ distance_per_bin = (2.0 * side_distance) / n_bins
 '--------------------------------------------------------------------'
 
 try:
-    total_particles_simulated = np.load('total_particles_simulated.npy')
+    total_particles_simulated = np.load(os.path.join(ResultsFolder,'total_particles_simulated.npy'))
 except FileNotFoundError:
     total_particles_simulated = 0
 
-total_loops = 3000
+total_loops = 5000
 
 # set up simulation
 sim = rebound.Simulation()
 sim.units = ('s', 'm', 'kg')
-sim.integrator = 'ias15'
+sim.integrator = 'whfast'
+sim.dt = 30.0 
+
 sim.add("399") # Earth
 active_particles = sim.N
 sim.N_active = active_particles
@@ -66,7 +83,7 @@ sim.save("solar_system.bin")
 
 for n in range(total_loops):
 
-    N_particles = int(5e4)
+    N_particles = int(1e5)
     n_outputs = int(1e3)
 
     print(f"Loop {n+1} \n")
@@ -97,6 +114,18 @@ for n in range(total_loops):
     lat_idx = [np.where(idx_array==i)[0][0] for i in idx]
     vel_idx = [np.where(idx_array==i)[1][0] for i in idx]
 
+    lat_idx = np.array(lat_idx)
+    vel_idx = np.array(vel_idx)
+
+    # REMOVE EDGE VELOCITIES
+    lat_idx = lat_idx[vel_idx!=99]
+    theta_pos = theta_pos[vel_idx!=99]
+    phi_pos = phi_pos[vel_idx!=99]
+    vel_idx = vel_idx[vel_idx!=99]
+
+    # update
+    N_particles = len(vel_idx)
+
     vels = vel_mids[vel_idx] * 1e3  # covert from km/s to m/s
     theta_vel = np.deg2rad(lat_mids[lat_idx]) + (np.pi/2.0) # convert to radians and shift to correct range for spherical coords
     phi_vel = np.random.uniform(0, 2.0 * np.pi, N_particles)
@@ -112,8 +141,11 @@ for n in range(total_loops):
         if vr_dot <= 0: # only simulate particles that approach the Earth (i.e. relative velocity <= 0)
             sim.add(m=0.0, x=x[i], y=y[i], z=z[i], vx=vx[i], vy=vy[i], vz=vz[i])
 
-    results = np.zeros(shape=(n_outputs*(sim.N-1), 4)) * np.nan
+    results = np.zeros(shape=(n_outputs*(sim.N-1), 7)) * np.nan
     times = np.linspace(0.0, 2.0 * 24.0 * 60.0 * 60.0, n_outputs)
+
+    # update again
+    N_particles = sim.N - sim.N_active
 
     for i, step in enumerate(times):
         percent = round(((i+1)/n_outputs*100),2)
@@ -127,22 +159,29 @@ for n in range(total_loops):
             results[i*j,2] = sim.particles[j].y
             results[i*j,3] = sim.particles[j].z
 
-    # 'save results in a fits file'
-    # results_fits = fits.PrimaryHDU()
-    # results_name = os.path.join(os.getcwd(), 'flux_results.fits')
-    # results_fits.writeto(results_name)
-    #
-    # cols = [fits.Column(name='index', format='D', array=results[:,0]),
-    #         fits.Column(name='x', format='D', array=results[:,1]),
-    #         fits.Column(name='y', format='D', array=results[:,2]),
-    #         fits.Column(name='z', format='D', array=results[:,3])]
-    #
-    # results_fits = fits.BinTableHDU.from_columns(cols)
-    #
-    # results_fits_list = fits.open(results_name, mode='append')
-    # results_fits_list.append(results_fits)
-    # results_fits_list.writeto(results_name, overwrite=True)
-    # results_fits_list.close()
+            results[i*j,4] = sim.particles[j].vx
+            results[i*j,5] = sim.particles[j].vy
+            results[i*j,6] = sim.particles[j].vz
+
+    'save results in a fits file'
+    results_fits = fits.PrimaryHDU()
+    results_name = os.path.join(ResultsFolder, 'velocity_flux_results.fits')
+    results_fits.writeto(results_name)
+
+    cols = [fits.Column(name='index', format='D', array=results[:,0]),
+            fits.Column(name='x', format='D', array=results[:,1]),
+            fits.Column(name='y', format='D', array=results[:,2]),
+            fits.Column(name='z', format='D', array=results[:,3]),
+            fits.Column(name='vx', format='D', array=results[:,4]),
+            fits.Column(name='vy', format='D', array=results[:,5]),
+            fits.Column(name='vz', format='D', array=results[:,6])]
+
+    results_fits = fits.BinTableHDU.from_columns(cols)
+
+    results_fits_list = fits.open(results_name, mode='append')
+    results_fits_list.append(results_fits)
+    results_fits_list.writeto(results_name, overwrite=True)
+    results_fits_list.close()
 
     '------------------------------------------- UPDATE --------------------------------------------'
 
@@ -251,6 +290,7 @@ plt.subplot(111)
 plt.hexbin(x_rotate/3.844e8, z_rotate/3.844e8, C=weights/np.median(weights), gridsize=gridsize, cmap=CM.jet, bins='log', reduce_C_function=np.mean)
 plt.axis([0.0, 1.0, -1.0, 1.0])
 
+plt.clim(1.0, 1.4)
 formatter = LogFormatter(10, labelOnlyBase=False)
 cb = plt.colorbar(format=formatter)
 cb.set_label('mean value')
