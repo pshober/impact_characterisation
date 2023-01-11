@@ -17,6 +17,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 import datetime
+import shutil
 
 # create save folder for raw results
 date_str = datetime.datetime.now().strftime('%Y%m%d')
@@ -66,13 +67,13 @@ try:
 except FileNotFoundError:
     total_particles_simulated = 0
 
-total_loops = 5000
+total_loops = 10000
 
 # set up simulation
 sim = rebound.Simulation()
 sim.units = ('s', 'm', 'kg')
 sim.integrator = 'whfast'
-sim.dt = 30.0
+sim.dt = 20.0
 
 sim.add("399") # Earth
 active_particles = sim.N
@@ -83,8 +84,8 @@ sim.save("solar_system.bin")
 
 for n in range(total_loops):
 
-    N_particles = int(1e5)
-    n_outputs = int(1e3)
+    N_particles = int(6e4)
+    n_outputs = int(8e2)
 
     print(f"Loop {n+1} \n")
 
@@ -141,11 +142,11 @@ for n in range(total_loops):
         if vr_dot <= 0: # only simulate particles that approach the Earth (i.e. relative velocity <= 0)
             sim.add(m=0.0, x=x[i], y=y[i], z=z[i], vx=vx[i], vy=vy[i], vz=vz[i])
 
-    results = np.zeros(shape=(n_outputs*(sim.N-1), 7)) * np.nan
-    times = np.linspace(0.0, 2.0 * 24.0 * 60.0 * 60.0, n_outputs)
-
     # update again
     N_particles = sim.N - sim.N_active
+
+    results = np.zeros(shape=(n_outputs*(sim.N-1), 4)) * np.nan
+    times = np.linspace(0.0, 2.0*24.0*60.0*60.0, n_outputs)
 
     for i, step in enumerate(times):
         percent = round(((i+1)/n_outputs*100),2)
@@ -159,29 +160,29 @@ for n in range(total_loops):
             results[i*j,2] = sim.particles[j].y
             results[i*j,3] = sim.particles[j].z
 
-            results[i*j,4] = sim.particles[j].vx
-            results[i*j,5] = sim.particles[j].vy
-            results[i*j,6] = sim.particles[j].vz
+            # results[i*j,4] = sim.particles[j].vx
+            # results[i*j,5] = sim.particles[j].vy
+            # results[i*j,6] = sim.particles[j].vz
 
-    'save results in a fits file'
-    results_fits = fits.PrimaryHDU()
-    results_name = os.path.join(ResultsFolder, 'velocity_flux_results.fits')
-    results_fits.writeto(results_name)
-
-    cols = [fits.Column(name='index', format='D', array=results[:,0]),
-            fits.Column(name='x', format='D', array=results[:,1]),
-            fits.Column(name='y', format='D', array=results[:,2]),
-            fits.Column(name='z', format='D', array=results[:,3]),
-            fits.Column(name='vx', format='D', array=results[:,4]),
-            fits.Column(name='vy', format='D', array=results[:,5]),
-            fits.Column(name='vz', format='D', array=results[:,6])]
-
-    results_fits = fits.BinTableHDU.from_columns(cols)
-
-    results_fits_list = fits.open(results_name, mode='append')
-    results_fits_list.append(results_fits)
-    results_fits_list.writeto(results_name, overwrite=True)
-    results_fits_list.close()
+    # 'save results in a fits file'
+    # results_fits = fits.PrimaryHDU()
+    # results_name = os.path.join(ResultsFolder, 'velocity_flux_results_'+str(n)+'.fits')
+    # results_fits.writeto(results_name)
+    #
+    # cols = [fits.Column(name='index', format='D', array=results[:,0]),
+    #         fits.Column(name='x', format='D', array=results[:,1]),
+    #         fits.Column(name='y', format='D', array=results[:,2]),
+    #         fits.Column(name='z', format='D', array=results[:,3]),
+    #         fits.Column(name='vx', format='D', array=results[:,4]),
+    #         fits.Column(name='vy', format='D', array=results[:,5]),
+    #         fits.Column(name='vz', format='D', array=results[:,6])]
+    #
+    # results_fits = fits.BinTableHDU.from_columns(cols)
+    #
+    # results_fits_list = fits.open(results_name, mode='append')
+    # results_fits_list.append(results_fits)
+    # results_fits_list.writeto(results_name, overwrite=True)
+    # results_fits_list.close()
 
     '------------------------------------------- UPDATE --------------------------------------------'
 
