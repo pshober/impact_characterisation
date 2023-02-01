@@ -55,7 +55,7 @@ for filename in os.listdir(folder_name):
 results = np.zeros((100,100,100))
 lon_bounds = np.linspace(-180.0, 180.0, 101)
 lat_bounds = np.linspace(-90.0, 90.0, 101)
-vel_bounds = np.linspace(10.0, 72.0, 101)  # rough estimate
+vel_bounds = np.linspace(10.0, 80.0, 101)  # rough estimate
 
 def h_index_find(lat, lon, vel, lat_edges, lon_edges, vel_edges):
     closest_lat_idx = min(range(len(lat_edges)), key=lambda i: abs(lat_edges[i] - lat)) - 1
@@ -84,7 +84,7 @@ for i, filename in enumerate(os.listdir(folder_name)):
 
          results[lat_idx, lon_idx, vel_idx] += row['impact_probability']
 
-np.save('results_histogram.npy', results)
+np.save('results_histogram_newrange.npy', results)
 
 def middle4bins(array):
     return np.array([(array[i]+array[i+1]) / 2.0 for i in range(len(array)-1)])
@@ -96,3 +96,7 @@ vel_mids = middle4bins(vel_bounds)
 # plot lon v. lat impact 2D histogram
 x,y = np.meshgrid(lon_mids, lat_mids)
 plt.hist2d(np.concatenate(x),np.concatenate(y), weights=np.concatenate(np.sum(results,axis=-1).T), bins=100); plt.show()
+
+# plot lon v. vel 2D histogram
+x,y = np.meshgrid(lon_mids,vel_mids)
+plt.hist2d(np.concatenate(x),np.concatenate(y), weights=np.concatenate(np.sum(results,axis=0)), bins=100); plt.show()
